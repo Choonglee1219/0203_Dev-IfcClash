@@ -150,15 +150,16 @@ def post_process_bcf(bcf_file_path):
 
 
 # ----- Main Space -----
-## Input Parameters
-bcf_file_path = r"C:\\01-Projects\\clash-detection.bcf"
+if __name__ == "__main__":
+    ## Input Parameters
+    bcf_file_path = r"C:\\01-Projects\\clash-detection.bcf"
 
-## Define clash matrix
-input_file = r"C:\\01-Projects\\0203_Dev-IfcClash\\input.json"
-with open(input_file, "r") as clash_sets_file:
-   clash_sets = json.loads(clash_sets_file.read())
+    ## Define clash matrix
+    input_file = r"C:\\01-Projects\\0203_Dev-IfcClash\\input.json"
+    with open(input_file, "r") as clash_sets_file:
+       clash_sets = json.loads(clash_sets_file.read())
 
 
-## Function Execution
-detect_clashes(clash_sets, bcf_file_path)
-post_process_bcf(bcf_file_path)
+    ## Function Execution
+    detect_clashes(clash_sets, bcf_file_path)
+    post_process_bcf(bcf_file_path)
