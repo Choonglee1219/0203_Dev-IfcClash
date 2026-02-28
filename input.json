@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Clash Set A",
+    "mode": "intersection",
+    "a": [
+      {
+        "file": "C:\\01-Projects\\rst.ifc",
+        "selector": "IfcSlab",
+        "mode": "i"
+      }
+    ],
+    "b": [
+      {
+        "file": "C:\\01-Projects\\rst.ifc",
+        "selector": "IfcBeam",
+        "mode": "i"
+      }
+    ],
+    "tolerance": 0.01,
+    "check_all": true
+  }
+]
