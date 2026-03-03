@@ -1,5 +1,5 @@
-# c:\01-Projects\0203_Dev-IfcClash\main.py
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List
@@ -8,11 +8,20 @@ import os
 import logging
 import clash  # clash.py 모듈 임포트
 
-# 로깅 설정
+# --- 로깅 설정 ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ClashService")
 
 app = FastAPI(title="IFC Clash Detection Microservice")
+
+# --- CORS 미들웨어 설정 추가 ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 모든 오리진 허용 (실제 운영 시에는 클라이언트 IP/도메인만 허용 권장)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Pydantic Models (input.json 구조 정의) ---
 
