@@ -23,11 +23,11 @@ def detect_clashes(clash_sets, bcf_file_path):
     clasher.clash()
     clasher.export_bcfxml()
 
-    clashes_count = len(clash_sets[0]["clashes"])
+    total_clashes = sum(len(cs.get("clashes", [])) for cs in clash_sets)
 
-    return print(f"""
+    print(f"""
     Clashes were detected and a BCF was Created: {bcf_file_path}
-    Found clashes: {clashes_count}
+    Found clashes: {total_clashes}
     """)
 
 
