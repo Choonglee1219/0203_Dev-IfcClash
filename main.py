@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import uuid
 import os
 import logging
@@ -35,7 +35,8 @@ class ClashSet(BaseModel):
     mode: str
     a: List[IfcSelector]
     b: List[IfcSelector]
-    tolerance: float
+    tolerance: Optional[float] = None
+    clearance: Optional[float] = None
     check_all: bool
 
 # --- Helper Functions ---
