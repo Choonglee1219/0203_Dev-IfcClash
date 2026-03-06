@@ -23,11 +23,11 @@ def detect_clashes(clash_sets, bcf_file_path):
     clasher.clash()
     clasher.export_bcfxml()
 
-    clashes_count = len(clash_sets[0]["clashes"])
+    total_clashes = sum(len(cs.get("clashes", [])) for cs in clash_sets)
 
-    return print(f"""
+    print(f"""
     Clashes were detected and a BCF was Created: {bcf_file_path}
-    Found clashes: {clashes_count}
+    Found clashes: {total_clashes}
     """)
 
 
@@ -126,10 +126,11 @@ def post_process_bcf(bcf_file_path):
                 {"Color": "B300FF00"}
             )
 
-            guid_a = component_guids[0]
-            guid_b = component_guids[1]
-            ET.SubElement(color_a, "Component", {"IfcGuid": guid_a})
-            ET.SubElement(color_b, "Component", {"IfcGuid": guid_b})
+            if len(component_guids) >= 2:
+                guid_a = component_guids[0]
+                guid_b = component_guids[1]
+                ET.SubElement(color_a, "Component", {"IfcGuid": guid_a})
+                ET.SubElement(color_b, "Component", {"IfcGuid": guid_b})
 
         tree.write(bcfv_path, encoding="utf-8", xml_declaration=True)
 
@@ -152,10 +153,10 @@ def post_process_bcf(bcf_file_path):
 # ----- Main Space -----
 if __name__ == "__main__":
     ## Input Parameters
-    bcf_file_path = r"C:\\01-Projects\\clash-detection.bcf"
+    bcf_file_path = r"D:\\02-Dev\\0203_Dev-IfcClash\\clash-detection.bcf"
 
     ## Define clash matrix
-    input_file = r"C:\\01-Projects\\0203_Dev-IfcClash\\input.json"
+    input_file = r"D:\\02-Dev\\0203_Dev-IfcClash\\input.json"
     with open(input_file, "r") as clash_sets_file:
        clash_sets = json.loads(clash_sets_file.read())
 
