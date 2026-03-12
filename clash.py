@@ -1,4 +1,3 @@
-from ifcclash.ifcclash import Clasher, ClashSettings
 import logging
 import os
 import json
@@ -6,11 +5,13 @@ import zipfile
 import base64
 import shutil
 import xml.etree.ElementTree as ET
+from ifcclash.ifcclash import Clasher, ClashSettings
 
 
 def detect_clashes(clash_sets, bcf_file_path):
     """
     Perform clash detection based on the provided clash sets and export to BCF.
+    Returns the raw clash data (including exact coordinates).
     """
     settings = ClashSettings()
     settings.logger = logging.getLogger("Clash")
@@ -22,31 +23,45 @@ def detect_clashes(clash_sets, bcf_file_path):
     clasher.clash_sets = clash_sets
     clasher.clash()
 
-    # BCF를 먼저 내보냅니다. ifcclash 라이브러리는 이 과정에서 간섭 결과(dict)를 최종적으로 확정할 수 있습니다.
+    # BCF를 먼저 내보냅니다.
     clasher.export_bcfxml()
 
-    # JSON 추출 및 정확한 개수 계산은 BCF 파일 내용을 직접 파싱하는 post_process_bcf 단계에서 수행합니다.
-    # 이 시점의 clasher.clash_sets에는 최종 좌표 정보가 없기 때문입니다.
+    # clasher.clash_sets에는 이미 'p1' (Clash Point) 좌표 정보가 포함되어 있습니다.
+    # 이를 반환하여 후처리 단계에서 정확한 좌표 매핑에 사용합니다.
     total_clashes_initial = sum(len(cs.get("clashes", [])) for cs in clasher.clash_sets)
 
     print(f"""
     Initial clash detection complete. BCF created at: {bcf_file_path}
-    Found potential clashes: {total_clashes_initial} (This count may include processing messages)
-    Starting post-processing and data extraction...
+    Found potential clashes: {total_clashes_initial}
     """)
+    
+    return clasher.clash_sets
 
 
-def post_process_bcf(bcf_file_path):
+def post_process_bcf(bcf_file_path, raw_clash_data=None):
     """
-    Post-process the BCF package, standardize filenames, inject snapshots, AND extract clash data to JSON.
+    Post-process the BCF package.
+    Standardize filenames, inject snapshots, AND extract clash data to JSON.
+    If raw_clash_data is provided, it injects the exact 'clash_point' (p1).
     """
     temp_dir = bcf_file_path + "_extracted"
     
-    # 1. Decomporess the BCF package
+    # 1. Decompress the BCF package
     if not os.path.exists(bcf_file_path):
         print(f"Error: BCF file not found at {bcf_file_path}")
         return
     
+    # --- Build Clash Point Lookup Map ---
+    # GUID 쌍(Set)을 키로 사용하여 순서에 상관없이 좌표를 찾을 수 있게 합니다.
+    clash_point_map = {}
+    if raw_clash_data:
+        for cs in raw_clash_data:
+            if "clashes" in cs:
+                for clash in cs["clashes"].values():
+                    # frozenset을 사용하여 guid1-guid2 순서와 무관하게 매칭
+                    key = frozenset([clash["a_global_id"], clash["b_global_id"]])
+                    clash_point_map[key] = clash["p1"]
+
     extracted_data = []  # JSON으로 저장할 데이터 리스트
 
     with zipfile.ZipFile(bcf_file_path, 'r') as zip_ref:
@@ -62,6 +77,7 @@ def post_process_bcf(bcf_file_path):
         guids = []
         camera_view_point = None
         camera_direction = None
+        exact_clash_point = None
 
         # --- 1. Extract Title from markup.bcf ---
         markup_path = os.path.join(topic_path, "markup.bcf")
@@ -71,7 +87,6 @@ def post_process_bcf(bcf_file_path):
                 root = tree.getroot()
                 # Handle Namespaces loosely by searching via iter
                 topic_node = root.find("Topic")
-                # If direct find fails due to namespace, try iterating
                 if topic_node is None:
                     for child in root.iter():
                         if child.tag.endswith("Topic"):
@@ -83,7 +98,6 @@ def post_process_bcf(bcf_file_path):
                 print(f"Warning parsing markup.bcf in {topic_guid}: {e}")
 
         # --- 2. Extract GUIDs and Camera from .bcfv file ---
-        # Find the .bcfv file (usually viewpoint.bcfv or similar)
         bcfv_files = [f for f in os.listdir(topic_path) if f.endswith(".bcfv")]
         if bcfv_files:
             bcfv_path = os.path.join(topic_path, bcfv_files[0])
@@ -91,15 +105,13 @@ def post_process_bcf(bcf_file_path):
                 v_tree = ET.parse(bcfv_path)
                 v_root = v_tree.getroot()
 
-                # Helper to find text value ignoring namespaces
                 def get_tag_text(element, tag_suffix):
                     for child in element.iter():
                         if child.tag.endswith(tag_suffix) and child.text:
                             return child.text
                     return None
 
-                # Extract GUIDs from Selection/Component
-                # Search for 'Selection' then 'Component'
+                # Extract GUIDs
                 for elem in v_root.iter():
                     if elem.tag.endswith("Selection"):
                         for child in elem:
@@ -107,7 +119,7 @@ def post_process_bcf(bcf_file_path):
                                 if "IfcGuid" in child.attrib:
                                     guids.append(child.attrib["IfcGuid"])
                 
-                # Extract Camera Info
+                # Extract Camera Info (Calculated Viewpoint)
                 for elem in v_root.iter():
                     if elem.tag.endswith("CameraViewPoint"):
                         x = get_tag_text(elem, "X")
@@ -126,7 +138,12 @@ def post_process_bcf(bcf_file_path):
             except Exception as e:
                 print(f"Warning parsing bcfv in {topic_guid}: {e}")
 
-        # --- 3. Store extracted data ---
+        # --- 3. Match with Exact Clash Point ---
+        if len(guids) >= 2:
+            key = frozenset([guids[0], guids[1]])
+            exact_clash_point = clash_point_map.get(key)
+
+        # --- 4. Store extracted data ---
         guid1 = guids[0] if len(guids) > 0 else None
         guid2 = guids[1] if len(guids) > 1 else None
 
@@ -135,17 +152,14 @@ def post_process_bcf(bcf_file_path):
             "clash_guid": topic_guid,
             "guid1": guid1, 
             "guid2": guid2, 
-            "camera_view_point": camera_view_point,
-            "camera_direction": camera_direction
+            "clash_point": exact_clash_point
         })
 
         # A. Rename visualization files (.bcfv) to standard name
-        # (Re-fetch list as we might have accessed it)
         bcfv_files = [f for f in os.listdir(topic_path) if f.endswith(".bcfv")]
         for f in bcfv_files:
             old_bcfv = os.path.join(topic_path, f)
             new_bcfv = os.path.join(topic_path, "viewpoint.bcfv")
-            # Avoid error if the file is already named viewpoint.bcfv
             if old_bcfv != new_bcfv:
                 if os.path.exists(new_bcfv): os.remove(new_bcfv)
                 os.rename(old_bcfv, new_bcfv)
@@ -160,21 +174,16 @@ def post_process_bcf(bcf_file_path):
         markup_path = os.path.join(topic_path, "markup.bcf")
         if not os.path.exists(markup_path): continue
 
-
         tree = ET.parse(markup_path)
         root = tree.getroot()
         
         viewpoints_node = root.find("Viewpoints")
         if viewpoints_node is not None:
-            # Remove all existing Viewpoint / Snapshot
             for child in list(viewpoints_node):
                 viewpoints_node.remove(child)
-                
-            # Standardize Viewpoint file reference (viewpoint.bcfv)
+            
             viewpoint = ET.SubElement(viewpoints_node, "Viewpoint")
             viewpoint.text = "viewpoint.bcfv"
-            
-            # Standardize Snapshot file reference (snapshot.png)
             snapshot = ET.SubElement(viewpoints_node, "Snapshot")
             snapshot.text = "snapshot.png"
 
@@ -204,18 +213,8 @@ def post_process_bcf(bcf_file_path):
                 components_node.remove(existing_coloring)
 
             coloring_node = ET.SubElement(components_node, "Coloring")
-
-            color_a = ET.SubElement(
-                coloring_node,
-                "Color",
-                {"Color": "B3FF0000"}
-            )
-            
-            color_b = ET.SubElement(
-                coloring_node,
-                "Color",
-                {"Color": "B300FF00"}
-            )
+            color_a = ET.SubElement(coloring_node, "Color", {"Color": "B3FF0000"})
+            color_b = ET.SubElement(coloring_node, "Color", {"Color": "B300FF00"})
 
             if len(component_guids) >= 2:
                 guid_a = component_guids[0]
@@ -230,7 +229,7 @@ def post_process_bcf(bcf_file_path):
     with open(json_output_path, "w", encoding="utf-8") as f:
         json.dump(extracted_data, f, indent=4, ensure_ascii=False)
 
-    # 4. Re-compress the structure back into a BCF package
+    # 4. Re-compress
     with zipfile.ZipFile(bcf_file_path, 'w', zipfile.ZIP_DEFLATED) as new_zip:
         for root, dirs, files in os.walk(temp_dir):
             for file in files:
@@ -238,19 +237,18 @@ def post_process_bcf(bcf_file_path):
                 rel_path = os.path.relpath(full_path, temp_dir)
                 new_zip.write(full_path, rel_path)
 
-    # 5. Cleanup: Remove temporary extraction directory
     shutil.rmtree(temp_dir)
-
     total_clashes = len(extracted_data)
-    return print(f"""\
-
+    
+    print(f"""\
     Final BCF package created: {bcf_file_path}
     Total clashes extracted: {total_clashes}
     Clash data saved to: {json_output_path}
     """)
+    
+    # 5. Make sure to return something if needed, currently just printing results.
+    return 
 
-
-# ----- Main Space -----
 if __name__ == "__main__":
     ## Input Parameters
     bcf_file_path = r"D:\\02-Dev\\0203_Dev-IfcClash\\clash-detection.bcf"
@@ -260,7 +258,7 @@ if __name__ == "__main__":
     with open(input_file, "r") as clash_sets_file:
        clash_sets = json.loads(clash_sets_file.read())
 
-
     ## Function Execution
-    detect_clashes(clash_sets, bcf_file_path)
-    post_process_bcf(bcf_file_path)
+    # 원본 데이터(raw_clash_data)를 받아서 post_process_bcf에 전달
+    raw_clash_data = detect_clashes(clash_sets, bcf_file_path)
+    post_process_bcf(bcf_file_path, raw_clash_data)

@@ -70,10 +70,12 @@ async def run_clash_detection(clash_sets: List[ClashSet], background_tasks: Back
         logger.info(f"Starting clash detection for request {request_id}")
 
         # 3. 간섭 체크 실행 (clash.py 로직)
-        clash.detect_clashes(clash_data, output_path)
+        # raw_clash_data(실제 좌표 포함)를 반환받음
+        raw_clash_data = clash.detect_clashes(clash_data, output_path)
 
         # 4. BCF 후처리 (스냅샷 생성 및 XML 수정)
-        clash.post_process_bcf(output_path)
+        # raw_clash_data를 전달하여 정확한 좌표 매핑
+        clash.post_process_bcf(output_path, raw_clash_data)
 
         if not os.path.exists(output_path):
             raise HTTPException(status_code=500, detail="BCF file generation failed.")
