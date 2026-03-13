@@ -37,12 +37,14 @@ def detect_clashes(clash_sets, bcf_file_path):
     
     return clasher.clash_sets
 
+    # Return the raw clash sets which contain the exact clash points (p1)
+    return clasher.clash_sets
+
 
 def post_process_bcf(bcf_file_path, raw_clash_data=None):
     """
-    Post-process the BCF package.
-    Standardize filenames, inject snapshots, AND extract clash data to JSON.
-    If raw_clash_data is provided, it injects the exact 'clash_point' (p1).
+    Post-process the BCF package to standardize filenames and inject snapshots.
+    Also extracts exact clash point coordinates to a JSON file.
     """
     temp_dir = bcf_file_path + "_extracted"
     
@@ -67,92 +69,60 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
     with zipfile.ZipFile(bcf_file_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
 
+    # --- Prepare Clash Point Lookup Map ---
+    clash_point_map = {}
+    if raw_clash_data:
+        for cs in raw_clash_data:
+            if "clashes" in cs:
+                for clash in cs["clashes"].values():
+                    # Map frozenset of GUIDs to p1 to allow order-independent lookup
+                    guids = frozenset([clash["a_global_id"], clash["b_global_id"]])
+                    clash_point_map[guids] = clash["p1"]
+
+    extracted_data = []
+
     # 2. Iterate through each Topic folder (identified by GUID)
     for topic_guid in os.listdir(temp_dir):
         topic_path = os.path.join(temp_dir, topic_guid)
         if not os.path.isdir(topic_path): continue
         
-        # Initialize data holders for this topic
+        # --- Extract Information for JSON ---
         clash_set_name = "Unknown"
         guids = []
-        camera_view_point = None
-        camera_direction = None
-        exact_clash_point = None
+        clash_point = None
 
-        # --- 1. Extract Title from markup.bcf ---
+        # 1. Parse markup.bcf for Title (Clash Set Name)
         markup_path = os.path.join(topic_path, "markup.bcf")
         if os.path.exists(markup_path):
             try:
-                tree = ET.parse(markup_path)
-                root = tree.getroot()
-                # Handle Namespaces loosely by searching via iter
-                topic_node = root.find("Topic")
-                if topic_node is None:
-                    for child in root.iter():
-                        if child.tag.endswith("Topic"):
-                            topic_node = child
-                            break
-                
-                clash_set_name = topic_node.find("Title").text if topic_node is not None and topic_node.find("Title") is not None else "Unknown"
-            except (ET.ParseError, AttributeError, IndexError, TypeError, ValueError) as e:
-                print(f"Warning parsing markup.bcf in {topic_guid}: {e}")
+                m_tree = ET.parse(markup_path)
+                for elem in m_tree.getroot().iter():
+                    if elem.tag.endswith("Title"):
+                        clash_set_name = elem.text
+                        break
+            except: pass
 
-        # --- 2. Extract GUIDs and Camera from .bcfv file ---
-        bcfv_files = [f for f in os.listdir(topic_path) if f.endswith(".bcfv")]
-        if bcfv_files:
-            bcfv_path = os.path.join(topic_path, bcfv_files[0])
+        # 2. Parse BCFV for GUIDs
+        bcfv_files_search = [f for f in os.listdir(topic_path) if f.endswith(".bcfv")]
+        if bcfv_files_search:
             try:
-                v_tree = ET.parse(bcfv_path)
-                v_root = v_tree.getroot()
+                v_tree = ET.parse(os.path.join(topic_path, bcfv_files_search[0]))
+                for elem in v_tree.getroot().iter():
+                    if elem.tag.endswith("Component") and "IfcGuid" in elem.attrib:
+                        guids.append(elem.attrib["IfcGuid"])
+            except: pass
 
-                def get_tag_text(element, tag_suffix):
-                    for child in element.iter():
-                        if child.tag.endswith(tag_suffix) and child.text:
-                            return child.text
-                    return None
-
-                # Extract GUIDs
-                for elem in v_root.iter():
-                    if elem.tag.endswith("Selection"):
-                        for child in elem:
-                            if child.tag.endswith("Component"):
-                                if "IfcGuid" in child.attrib:
-                                    guids.append(child.attrib["IfcGuid"])
-                
-                # Extract Camera Info (Calculated Viewpoint)
-                for elem in v_root.iter():
-                    if elem.tag.endswith("CameraViewPoint"):
-                        x = get_tag_text(elem, "X")
-                        y = get_tag_text(elem, "Y")
-                        z = get_tag_text(elem, "Z")
-                        if x and y and z:
-                            camera_view_point = [float(x), float(y), float(z)]
-                    
-                    if elem.tag.endswith("CameraDirection"):
-                        x = get_tag_text(elem, "X")
-                        y = get_tag_text(elem, "Y")
-                        z = get_tag_text(elem, "Z")
-                        if x and y and z:
-                            camera_direction = [float(x), float(y), float(z)]
-
-            except Exception as e:
-                print(f"Warning parsing bcfv in {topic_guid}: {e}")
-
-        # --- 3. Match with Exact Clash Point ---
+        # 3. Lookup P1
         if len(guids) >= 2:
             key = frozenset([guids[0], guids[1]])
-            exact_clash_point = clash_point_map.get(key)
-
-        # --- 4. Store extracted data ---
-        guid1 = guids[0] if len(guids) > 0 else None
-        guid2 = guids[1] if len(guids) > 1 else None
+            clash_point = clash_point_map.get(key)
 
         extracted_data.append({
-            "clash_set": clash_set_name, 
+            "clash_set": clash_set_name,
             "clash_guid": topic_guid,
-            "guid1": guid1, 
-            "guid2": guid2, 
-            "clash_point": exact_clash_point
+            "guid1": guids[0] if len(guids) > 0 else None,
+            "guid2": guids[1] if len(guids) > 1 else None,
+            "clash_point": clash_point
         })
 
         # A. Rename visualization files (.bcfv) to standard name
@@ -229,7 +199,7 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
     with open(json_output_path, "w", encoding="utf-8") as f:
         json.dump(extracted_data, f, indent=4, ensure_ascii=False)
 
-    # 4. Re-compress
+    # 4. Re-compress the structure back into a BCF package
     with zipfile.ZipFile(bcf_file_path, 'w', zipfile.ZIP_DEFLATED) as new_zip:
         for root, dirs, files in os.walk(temp_dir):
             for file in files:
@@ -237,12 +207,12 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
                 rel_path = os.path.relpath(full_path, temp_dir)
                 new_zip.write(full_path, rel_path)
 
+    # 5. Cleanup: Remove temporary extraction directory
     shutil.rmtree(temp_dir)
     total_clashes = len(extracted_data)
     
     print(f"""\
     Final BCF package created: {bcf_file_path}
-    Total clashes extracted: {total_clashes}
     Clash data saved to: {json_output_path}
     """)
     
