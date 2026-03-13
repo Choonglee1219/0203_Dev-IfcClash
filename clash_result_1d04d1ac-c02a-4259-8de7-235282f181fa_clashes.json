@@ -1,0 +1,145 @@
+[
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:128145 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "29098460-f505-4b83-bb11-4fe88fee3e94",
+        "guid1": "17qC4eX$v65AOIXuxtQbmP",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -1.695213170746578,
+            33.00414115909767,
+            3.6898094521325824
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:128141 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "345a5113-a5be-43cf-ba71-54d1613b356c",
+        "guid1": "17qC4eX$v65AOIXuxtQbm5",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -1.695240414641378,
+            36.60414115909767,
+            3.6898094521325824
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:187046 and IfcSlab/Floor:Generic Concrete 300mm:133345",
+        "clash_guid": "37874876-4724-4527-a152-aeedb3f28167",
+        "guid1": "09KD49MHTAmgrPjP7hgCV4",
+        "guid2": "2E3cuzY0LCc9ztHo7GNGl4",
+        "clash_point": [
+            -0.2376999999998809,
+            42.0112999999996,
+            3.539599999999999
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:187137 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "3c66f623-4440-4cc9-9cb7-cef1777ba314",
+        "guid1": "09KD49MHTAmgrPjP7hgCPZ",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -1.59999999999988,
+            31.28084999999952,
+            3.7824000000000004
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB305x165x40:126003 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "6152565a-1534-42a6-a9db-9bbbe48d4a83",
+        "guid1": "2KAei9id52lOmXjM$MzgAY",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -6.209919563687667,
+            29.65449999999961,
+            3.6895768584184183
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB305x165x40:125944 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "616085a1-54b6-47a0-bb63-cdd5bba73e77",
+        "guid1": "2KAei9id52lOmXjM$MzgLf",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -1.6099195636875685,
+            42.2528999999995,
+            3.6895768584184183
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:128135 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "7449a608-6691-450f-9e3a-7c09d8d905fb",
+        "guid1": "17qC4eX$v65AOIXuxtQbmF",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -4.955748704939978,
+            42.02225884090153,
+            3.6898094521325824
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:128137 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "81b08b6e-098b-436f-8f5b-42b94bc8f493",
+        "guid1": "17qC4eX$v65AOIXuxtQbm1",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -4.280530080657579,
+            40.22225884090153,
+            3.6898094521325824
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:128139 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "82be36e0-97b2-4cc5-8500-78d3586591ae",
+        "guid1": "17qC4eX$v65AOIXuxtQbm3",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -1.6952402947300784,
+            38.40414115909768,
+            3.6898094521325824
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB305x165x40:127308 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "85e7700e-c0d6-4a39-84e2-fc4b41773a39",
+        "guid1": "03xCtbdOn27BjzGcbkcHa5",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -6.045094546393047,
+            31.500911683173257,
+            3.689576630677354
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:128143 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "8e4920fc-b6e4-4b22-84f6-dede90ccb630",
+        "guid1": "17qC4eX$v65AOIXuxtQbm7",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -1.6952224534653784,
+            34.804141159097675,
+            3.6898094521325824
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:187046 and IfcSlab/Floor:160mm Concrete With 50mm Metal Deck:134840",
+        "clash_guid": "be8b80f8-e38b-46c7-8123-41a98d1cc718",
+        "guid1": "09KD49MHTAmgrPjP7hgCV4",
+        "guid2": "0aYFEk44n5JQyLfEcxCIcA",
+        "clash_point": [
+            -1.682499999999881,
+            42.0592499999996,
+            3.7824000000000004
+        ]
+    },
+    {
+        "clash_set": "IfcBeam/UB-Universal Beams:UB254x102x28:187137 and IfcSlab/Floor:Generic Concrete 300mm:133345",
+        "clash_guid": "ccdffb1f-3047-4b48-a277-8fe82570dcc9",
+        "guid1": "09KD49MHTAmgrPjP7hgCPZ",
+        "guid2": "2E3cuzY0LCc9ztHo7GNGl4",
+        "clash_point": [
+            -0.2376999999998799,
+            31.23289999999952,
+            3.539599999999999
+        ]
+    }
+]

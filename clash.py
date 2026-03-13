@@ -30,10 +30,14 @@ def detect_clashes(clash_sets, bcf_file_path):
     Found clashes: {total_clashes}
     """)
 
+    # Return the raw clash sets which contain the exact clash points (p1)
+    return clasher.clash_sets
 
-def post_process_bcf(bcf_file_path):
+
+def post_process_bcf(bcf_file_path, raw_clash_data=None):
     """
     Post-process the BCF package to standardize filenames and inject snapshots.
+    Also extracts exact clash point coordinates to a JSON file.
     """
     temp_dir = bcf_file_path + "_extracted"
     
@@ -45,11 +49,62 @@ def post_process_bcf(bcf_file_path):
     with zipfile.ZipFile(bcf_file_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
 
+    # --- Prepare Clash Point Lookup Map ---
+    clash_point_map = {}
+    if raw_clash_data:
+        for cs in raw_clash_data:
+            if "clashes" in cs:
+                for clash in cs["clashes"].values():
+                    # Map frozenset of GUIDs to p1 to allow order-independent lookup
+                    guids = frozenset([clash["a_global_id"], clash["b_global_id"]])
+                    clash_point_map[guids] = clash["p1"]
+
+    extracted_data = []
+
     # 2. Iterate through each Topic folder (identified by GUID)
     for topic_guid in os.listdir(temp_dir):
         topic_path = os.path.join(temp_dir, topic_guid)
         if not os.path.isdir(topic_path): continue
         
+        # --- Extract Information for JSON ---
+        clash_set_name = "Unknown"
+        guids = []
+        clash_point = None
+
+        # 1. Parse markup.bcf for Title (Clash Set Name)
+        markup_path = os.path.join(topic_path, "markup.bcf")
+        if os.path.exists(markup_path):
+            try:
+                m_tree = ET.parse(markup_path)
+                for elem in m_tree.getroot().iter():
+                    if elem.tag.endswith("Title"):
+                        clash_set_name = elem.text
+                        break
+            except: pass
+
+        # 2. Parse BCFV for GUIDs
+        bcfv_files_search = [f for f in os.listdir(topic_path) if f.endswith(".bcfv")]
+        if bcfv_files_search:
+            try:
+                v_tree = ET.parse(os.path.join(topic_path, bcfv_files_search[0]))
+                for elem in v_tree.getroot().iter():
+                    if elem.tag.endswith("Component") and "IfcGuid" in elem.attrib:
+                        guids.append(elem.attrib["IfcGuid"])
+            except: pass
+
+        # 3. Lookup P1
+        if len(guids) >= 2:
+            key = frozenset([guids[0], guids[1]])
+            clash_point = clash_point_map.get(key)
+
+        extracted_data.append({
+            "clash_set": clash_set_name,
+            "clash_guid": topic_guid,
+            "guid1": guids[0] if len(guids) > 0 else None,
+            "guid2": guids[1] if len(guids) > 1 else None,
+            "clash_point": clash_point
+        })
+
         # A. Rename visualization files (.bcfv) to standard name
         bcfv_files = [f for f in os.listdir(topic_path) if f.endswith(".bcfv")]
         for f in bcfv_files:
@@ -134,7 +189,12 @@ def post_process_bcf(bcf_file_path):
 
         tree.write(bcfv_path, encoding="utf-8", xml_declaration=True)
 
-    # 3. Re-compress the structure back into a BCF package
+    # 3. Save extracted data to JSON
+    json_output_path = os.path.splitext(bcf_file_path)[0] + "_clashes.json"
+    with open(json_output_path, "w", encoding="utf-8") as f:
+        json.dump(extracted_data, f, indent=4, ensure_ascii=False)
+
+    # 4. Re-compress the structure back into a BCF package
     with zipfile.ZipFile(bcf_file_path, 'w', zipfile.ZIP_DEFLATED) as new_zip:
         for root, dirs, files in os.walk(temp_dir):
             for file in files:
@@ -142,11 +202,12 @@ def post_process_bcf(bcf_file_path):
                 rel_path = os.path.relpath(full_path, temp_dir)
                 new_zip.write(full_path, rel_path)
 
-    # 4. Cleanup: Remove temporary extraction directory
+    # 5. Cleanup: Remove temporary extraction directory
     shutil.rmtree(temp_dir)
 
     return print(f"""
     Final BCF package created: {bcf_file_path}
+    Clash data saved to: {json_output_path}
     """)
 
 
