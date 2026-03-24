@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import uuid
 import os
+import zipfile
 import logging
 import clash  # clash.py 모듈 임포트
 
@@ -41,14 +42,15 @@ class ClashSet(BaseModel):
 
 # --- Helper Functions ---
 
-def remove_file(path: str):
+def remove_files(paths: List[str]):
     """파일 삭제 헬퍼 함수 (Background Task용)"""
-    try:
-        if os.path.exists(path):
-            os.remove(path)
-            logger.info(f"Temporary file removed: {path}")
-    except Exception as e:
-        logger.error(f"Error removing file {path}: {e}")
+    for path in paths:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+                logger.info(f"Temporary file removed: {path}")
+        except Exception as e:
+            logger.error(f"Error removing file {path}: {e}")
 
 # --- Endpoints ---
 
@@ -61,6 +63,8 @@ async def run_clash_detection(clash_sets: List[ClashSet], background_tasks: Back
     request_id = str(uuid.uuid4())
     output_filename = f"clash_result_{request_id}.bcf"
     output_path = os.path.abspath(output_filename)
+    zip_filename = f"clash_result_{request_id}.zip"
+    zip_path = os.path.abspath(zip_filename)
 
     try:
         # 2. Pydantic 모델을 dict 리스트로 변환 (clash.py 호환)
@@ -73,24 +77,34 @@ async def run_clash_detection(clash_sets: List[ClashSet], background_tasks: Back
         raw_clash_data = clash.detect_clashes(clash_data, output_path)
 
         # 4. BCF 후처리 (스냅샷 생성 및 XML 수정)
-        clash.post_process_bcf(output_path, raw_clash_data)
+        bcf_file, json_file = clash.post_process_bcf(output_path, raw_clash_data)
 
         if not os.path.exists(output_path):
             raise HTTPException(status_code=500, detail="BCF file generation failed.")
 
-        # 5. 파일 응답 및 전송 후 삭제 예약
-        background_tasks.add_task(remove_file, output_path)
+        # 5. BCF와 JSON을 ZIP으로 압축
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(bcf_file, os.path.basename(bcf_file))
+            zipf.write(json_file, os.path.basename(json_file))
+
+        # 6. 파일 응답 및 전송 후 삭제 예약
+        background_tasks.add_task(remove_files, [bcf_file, json_file, zip_path])
         
         return FileResponse(
-            path=output_path,
-            filename="clash_report.bcf",
-            media_type='application/octet-stream'
+            path=zip_path,
+            filename="clash_report.zip",
+            media_type='application/zip'
         )
 
     except Exception as e:
         # 에러 발생 시 임시 파일 정리
         if os.path.exists(output_path):
             os.remove(output_path)
+        json_fallback_path = os.path.splitext(output_path)[0] + "_clashes.json"
+        if os.path.exists(json_fallback_path):
+            os.remove(json_fallback_path)
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
         logger.error(f"Error during clash detection: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

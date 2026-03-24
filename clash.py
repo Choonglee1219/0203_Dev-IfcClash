@@ -37,9 +37,6 @@ def detect_clashes(clash_sets, bcf_file_path):
     
     return clasher.clash_sets
 
-    # Return the raw clash sets which contain the exact clash points (p1)
-    return clasher.clash_sets
-
 
 def post_process_bcf(bcf_file_path, raw_clash_data=None):
     """
@@ -68,18 +65,6 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
 
     with zipfile.ZipFile(bcf_file_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
-
-    # --- Prepare Clash Point Lookup Map ---
-    clash_point_map = {}
-    if raw_clash_data:
-        for cs in raw_clash_data:
-            if "clashes" in cs:
-                for clash in cs["clashes"].values():
-                    # Map frozenset of GUIDs to p1 to allow order-independent lookup
-                    guids = frozenset([clash["a_global_id"], clash["b_global_id"]])
-                    clash_point_map[guids] = clash["p1"]
-
-    extracted_data = []
 
     # 2. Iterate through each Topic folder (identified by GUID)
     for topic_guid in os.listdir(temp_dir):
@@ -216,8 +201,7 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
     Clash data saved to: {json_output_path}
     """)
     
-    # 5. Make sure to return something if needed, currently just printing results.
-    return 
+    return bcf_file_path, json_output_path
 
 if __name__ == "__main__":
     ## Input Parameters
