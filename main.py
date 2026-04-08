@@ -1,17 +1,27 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid
 import os
+import shutil
 import zipfile
 import logging
 import clash  # clash.py 모듈 임포트
+import edbData
 
 # --- 로깅 설정 ---
-logging.basicConfig(level=logging.INFO)
+# 1. 기본 로거 레벨을 WARNING으로 설정하여 서드파티 라이브러리 로그 억제
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+# 2. 커스텀 로거는 INFO 레벨 유지
 logger = logging.getLogger("ClashService")
+logger.setLevel(logging.INFO)
+# 3. API 엔드포인트 호출 기록 확인을 위해 uvicorn.access 로거 INFO 유지
+logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
 app = FastAPI(title="IFC Clash Detection Microservice")
 
@@ -106,6 +116,44 @@ async def run_clash_detection(clash_sets: List[ClashSet], background_tasks: Back
         if os.path.exists(zip_path):
             os.remove(zip_path)
         logger.error(f"Error during clash detection: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- 신규 엔드포인트: EDB Data 추가 ---
+
+@app.post("/add-edb-data", response_class=FileResponse)
+async def add_edb_data_endpoint(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    """
+    IFC 파일을 업로드하면 EDB API를 통해 데이터를 조회해 새로운 PropertySet을 추가하고,
+    Express ID 기준으로 자동 정렬된 IFC 파일을 반환합니다.
+    """
+    request_id = str(uuid.uuid4())
+    input_path = f"temp_input_{request_id}.ifc"
+    output_path = f"temp_output_{request_id}.ifc"
+
+    try:
+        # 업로드된 파일 저장
+        with open(input_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        logger.info(f"Starting EDB data addition for request {request_id}")
+        
+        # edbData 모듈 실행
+        edbData.adding_edbData(input_path, output_path)
+
+        if not os.path.exists(output_path):
+            raise HTTPException(status_code=500, detail="EDB Data processing failed.")
+
+        # 파일 반환 후 임시 파일 삭제
+        background_tasks.add_task(remove_files, [input_path, output_path])
+
+        return FileResponse(
+            path=output_path,
+            filename=f"{file.filename.replace('.ifc', '')}_edb.ifc",
+            media_type='application/octet-stream'
+        )
+    except Exception as e:
+        remove_files([input_path, output_path])
+        logger.error(f"Error in EDB Data Processing: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
