@@ -160,16 +160,17 @@ async def add_edb_data_endpoint(background_tasks: BackgroundTasks, file: UploadF
 
 # --- 신규 엔드포인트: 커스텀 Property 추가 ---
 
-@app.post("/add-properties", response_class=FileResponse)
-async def add_properties_endpoint(
+@app.post("/process-properties", response_class=FileResponse)
+async def process_properties_endpoint(
     background_tasks: BackgroundTasks, 
     file: UploadFile = File(...),
+    action: str = Form(...),
     expressIds: str = Form(...),
     propertiesData: str = Form(...)
 ):
     """
     프론트엔드에서 전달받은 객체 ID(expressIds) 배열과 다중 Pset/Property(propertiesData) 정보를
-    IFC 파일에 주입하고, Express ID 기준으로 정렬된 새 IFC 파일을 반환합니다.
+    IFC 파일에 주입(add)하거나 삭제(delete)하고, Express ID 기준으로 정렬된 새 IFC 파일을 반환합니다.
     """
     request_id = str(uuid.uuid4())
     input_path = f"temp_props_input_{request_id}.ifc"
@@ -182,13 +183,18 @@ async def add_properties_endpoint(
         with open(input_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        logger.info(f"Starting Add Properties for request {request_id}")
+        logger.info(f"Starting Process Properties ({action}) for request {request_id}")
         
-        # addProps 모듈 실행
-        addProps.add_properties_to_ifc(input_path, output_path, parsed_ids, parsed_props)
+        # Action 분기 처리
+        if action == "add":
+            addProps.add_properties_to_ifc(input_path, output_path, parsed_ids, parsed_props)
+        elif action == "delete":
+            addProps.delete_properties_from_ifc(input_path, output_path, parsed_ids, parsed_props)
+        else:
+            raise ValueError(f"Unknown action: {action}")
 
         if not os.path.exists(output_path):
-            raise HTTPException(status_code=500, detail="Property addition failed.")
+            raise HTTPException(status_code=500, detail="Property processing failed.")
 
         background_tasks.add_task(remove_files, [input_path, output_path])
 
@@ -199,7 +205,7 @@ async def add_properties_endpoint(
         )
     except Exception as e:
         remove_files([input_path, output_path])
-        logger.error(f"Error in Add Properties: {e}")
+        logger.error(f"Error in Process Properties ({action}): {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

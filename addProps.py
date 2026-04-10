@@ -233,3 +233,114 @@ def add_properties_to_ifc(input_file_path, output_file_path, express_ids, proper
     
     # 용량 최적화 및 뷰어 호환성을 위해 파일 라인(DATA 섹션) 정렬
     sort_ifc_file(output_file_path)
+
+def delete_properties_from_ifc(input_file_path, output_file_path, express_ids, properties_data):
+    """
+    8단계 로직을 통해 지정된 객체들에서 프로퍼티를 삭제하고 고아 객체를 정리합니다.
+    """
+    model = ifcopenshell.open(input_file_path)
+    
+    owner_history_list = model.by_type("IfcOwnerHistory")
+    owner_history = owner_history_list[0] if owner_history_list else None
+
+    target_ids = set([int(eid) for eid in express_ids])
+    target_elements = []
+    for exp_id in target_ids:
+        try:
+            element = model.by_id(exp_id)
+            if element.is_a("IfcObject"):
+                target_elements.append(element)
+        except Exception:
+            pass
+
+    if not target_elements:
+        print("[Warning] No valid elements found to delete properties.")
+        model.write(output_file_path)
+        sort_ifc_file(output_file_path)
+        return
+
+    for pset_data in properties_data:
+        pset_name = pset_data.get("name")
+        props_to_delete = [p.get("name") for p in pset_data.get("props", [])]
+        
+        if not pset_name or not props_to_delete:
+            continue
+
+        # 1. 대상 객체들이 포함된 관계(Rel)와 Pset 검색
+        rels_to_process = set()
+        for element in target_elements:
+            for rel in getattr(element, "IsDefinedBy", []):
+                if rel.is_a("IfcRelDefinesByProperties"):
+                    pset = rel.RelatingPropertyDefinition
+                    if pset and pset.is_a("IfcPropertySet") and getattr(pset, "Name", None) == pset_name:
+                        rels_to_process.add(rel)
+
+        for rel in list(rels_to_process):
+            pset = rel.RelatingPropertyDefinition
+            related_objects = list(rel.RelatedObjects)
+            
+            # 타겟 객체와 공유 객체 분류
+            target_objects_in_rel = [obj for obj in related_objects if obj.id() in target_ids]
+            shared_objects = [obj for obj in related_objects if obj.id() not in target_ids]
+            
+            if not target_objects_in_rel:
+                continue
+
+            is_shared = len(shared_objects) > 0
+            current_props = list(pset.HasProperties) if pset.HasProperties else []
+            new_props = [p for p in current_props if getattr(p, "Name", None) not in props_to_delete]
+
+            if not is_shared:
+                # 2. 공유 객체가 없다면 (선택된 객체들만 있다면) 기존 Pset에서 프로퍼티 삭제
+                pset.HasProperties = new_props if new_props else None
+                
+                # 5. HasProperties 가 비어있다면 Pset 삭제
+                if not new_props:
+                    try: model.remove(pset)
+                    except: pass
+                    # 6. Pset이 삭제되었으니 연결된 IfcRelDefinesByProperties 도 삭제
+                    try: model.remove(rel)
+                    except: pass
+            else:
+                # 3. 다른 객체가 공유 중이라면: 타겟 객체들용 새 Pset/Rel 생성
+                if new_props:
+                    new_pset = model.create_entity(
+                        "IfcPropertySet",
+                        GlobalId=ifcopenshell.guid.new(),
+                        OwnerHistory=owner_history,
+                        Name=pset.Name,
+                        Description=pset.Description,
+                        HasProperties=new_props
+                    )
+                    model.create_entity(
+                        "IfcRelDefinesByProperties",
+                        GlobalId=ifcopenshell.guid.new(),
+                        OwnerHistory=owner_history,
+                        Name=None,
+                        Description=None,
+                        RelatedObjects=target_objects_in_rel,
+                        RelatingPropertyDefinition=new_pset
+                    )
+                
+                # 4. 기존 공유 Pset의 Rel에서 타겟 객체 제외
+                rel.RelatedObjects = shared_objects
+
+            # 7. 혹시라도 RelatedObjects가 비어있는 Rel이 남았다면 삭제
+            if hasattr(rel, "RelatedObjects"):
+                if getattr(rel, "RelatedObjects", None) is not None and len(rel.RelatedObjects) == 0:
+                    try: model.remove(rel)
+                    except: pass
+
+    # 8. 고아(Orphan) Property 정리
+    all_referenced_props = set()
+    for pset in model.by_type("IfcPropertySet"):
+        for prop in getattr(pset, "HasProperties", []):
+            all_referenced_props.add(prop.id())
+
+    for prop in model.by_type("IfcPropertySingleValue"):
+        if prop.id() not in all_referenced_props:
+            try: model.remove(prop)
+            except: pass
+
+    model.write(output_file_path)
+    sort_ifc_file(output_file_path)
