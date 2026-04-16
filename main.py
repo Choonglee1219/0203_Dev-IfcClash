@@ -9,9 +9,9 @@ import shutil
 import zipfile
 import json
 import logging
-import clash  # clash.py 모듈 임포트
+import clash
 import edbData
-import addProps # 새로 생성할 프로퍼티 추가 모듈 임포트
+import editProps
 
 # --- 로깅 설정 ---
 # 1. 기본 로거 레벨을 WARNING으로 설정하여 서드파티 라이브러리 로그 억제
@@ -187,9 +187,9 @@ async def process_properties_endpoint(
         
         # Action 분기 처리
         if action == "add":
-            addProps.add_properties_to_ifc(input_path, output_path, parsed_ids, parsed_props)
+            editProps.add_properties_to_ifc(input_path, output_path, parsed_ids, parsed_props)
         elif action == "delete":
-            addProps.delete_properties_from_ifc(input_path, output_path, parsed_ids, parsed_props)
+            editProps.delete_properties_from_ifc(input_path, output_path, parsed_ids, parsed_props)
         else:
             raise ValueError(f"Unknown action: {action}")
 

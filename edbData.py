@@ -1,55 +1,6 @@
 import ifcopenshell
-import ifcopenshell.util.element
 import requests
-import re
-import os
-
-def sort_ifc_file(file_path):
-    """IFC 파일의 DATA 섹션을 Express ID 기준으로 정렬하여 덮어씁니다."""
-    if not os.path.exists(file_path):
-        return
-        
-    with open(file_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-
-    header_content, data_content, footer_content = [], [], []
-    is_data_section = False
-    id_pattern = re.compile(r'^#(\d+)=')
-
-    for line in lines:
-        stripped = line.strip()
-        if stripped == "DATA;":
-            is_data_section = True
-            header_content.append(line)
-            continue
-        elif stripped == "ENDSEC;" and is_data_section:
-            is_data_section = False
-            footer_content.append(line)
-            continue
-            
-        if is_data_section:
-            match = id_pattern.match(stripped)
-            if match:
-                data_content.append((int(match.group(1)), line))
-            else:
-                if data_content:
-                    last_id, last_text = data_content[-1]
-                    data_content[-1] = (last_id, last_text + line)
-                else:
-                    header_content.append(line)
-        else:
-            if not data_content:
-                header_content.append(line)
-            else:
-                footer_content.append(line)
-
-    data_content.sort(key=lambda x: x[0])
-
-    with open(file_path, 'w', encoding='utf-8') as f:
-        f.writelines(header_content)
-        for _, content in data_content:
-            f.write(content)
-        f.writelines(footer_content)
+from globals import sort_ifc_file, round_quantities
 
 # Definition of Adding EDB Data Function
 def adding_edbData(input_file_path, 
@@ -84,8 +35,14 @@ def adding_edbData(input_file_path,
         "projAbb": "CZ",
         "systemCode": "DL"
     }
-    response = requests.post(url, headers=headers, json=tag_list)
-    data = response.json()
+    
+    data = {}
+    try:
+        response = requests.post(url, headers=headers, json=tag_list, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"[Warning] Failed to fetch EDB data: {e}. Skipping property addition.")
 
     # Function : Parsing and Casting Value
     def get_cast_val(value, ifc_type_str):
@@ -212,12 +169,15 @@ def adding_edbData(input_file_path,
                         RelatingPropertyDefinition=pset
                     )
 
+    # 수량 데이터 소수점 셋째 자리 반올림 적용
+    round_quantities(model)
+
     model.write(output_file_path)
     
     # 3. 작성된 IFC 파일의 DATA 섹션을 Express ID 기준으로 정렬
     sort_ifc_file(output_file_path)
 
-    print("EDB Data are added to IFC elements and file is sorted!!")
+    print("EDB Data are added!!")
 
 # Main Space
 if __name__ == "__main__":
