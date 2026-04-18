@@ -5,6 +5,7 @@ import zipfile
 import base64
 import shutil
 import xml.etree.ElementTree as ET
+import concurrent.futures
 from ifcclash.ifcclash import Clasher, ClashSettings
 
 
@@ -66,51 +67,19 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
     with zipfile.ZipFile(bcf_file_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
 
-    # 2. Iterate through each Topic folder (identified by GUID)
-    for topic_guid in os.listdir(temp_dir):
+    # 최적화 1: base64 디코딩을 반복문 외부에서 1회만 수행
+    dummy_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+
+    def process_topic(topic_guid):
         topic_path = os.path.join(temp_dir, topic_guid)
-        if not os.path.isdir(topic_path): continue
-        
-        # --- Extract Information for JSON ---
+        if not os.path.isdir(topic_path): 
+            return None
+            
         clash_set_name = "Unknown"
         guids = []
         clash_point = None
 
-        # 1. Parse markup.bcf for Title (Clash Set Name)
-        markup_path = os.path.join(topic_path, "markup.bcf")
-        if os.path.exists(markup_path):
-            try:
-                m_tree = ET.parse(markup_path)
-                for elem in m_tree.getroot().iter():
-                    if elem.tag.endswith("Title"):
-                        clash_set_name = elem.text
-                        break
-            except: pass
-
-        # 2. Parse BCFV for GUIDs
-        bcfv_files_search = [f for f in os.listdir(topic_path) if f.endswith(".bcfv")]
-        if bcfv_files_search:
-            try:
-                v_tree = ET.parse(os.path.join(topic_path, bcfv_files_search[0]))
-                for elem in v_tree.getroot().iter():
-                    if elem.tag.endswith("Component") and "IfcGuid" in elem.attrib:
-                        guids.append(elem.attrib["IfcGuid"])
-            except: pass
-
-        # 3. Lookup P1
-        if len(guids) >= 2:
-            key = frozenset([guids[0], guids[1]])
-            clash_point = clash_point_map.get(key)
-
-        extracted_data.append({
-            "clash_set": clash_set_name,
-            "clash_guid": topic_guid,
-            "guid1": guids[0] if len(guids) > 0 else None,
-            "guid2": guids[1] if len(guids) > 1 else None,
-            "clash_point": clash_point
-        })
-
-        # A. Rename visualization files (.bcfv) to standard name
+        # A. BCFV 파싱, 정보 추출 및 XML 수정 (최적화 2: 파싱 1회로 통합)
         bcfv_files = [f for f in os.listdir(topic_path) if f.endswith(".bcfv")]
         for f in bcfv_files:
             old_bcfv = os.path.join(topic_path, f)
@@ -118,66 +87,87 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
             if old_bcfv != new_bcfv:
                 if os.path.exists(new_bcfv): os.remove(new_bcfv)
                 os.rename(old_bcfv, new_bcfv)
+                
+        new_bcfv = os.path.join(topic_path, "viewpoint.bcfv")
+        if os.path.exists(new_bcfv):
+            try:
+                v_tree = ET.parse(new_bcfv)
+                v_root = v_tree.getroot()
+                
+                for elem in v_root.iter():
+                    if elem.tag.endswith("Component") and "IfcGuid" in elem.attrib:
+                        if elem.attrib["IfcGuid"] not in guids:
+                            guids.append(elem.attrib["IfcGuid"])
+                            
+                components_node = v_root.find("Components")
+                if components_node is not None:
+                    selection_node = components_node.find("Selection")
+                    component_guids = [] if selection_node is None else [comp.attrib["IfcGuid"] for comp in selection_node.findall("Component") if "IfcGuid" in comp.attrib]
 
-        # B. Create a dummy snapshot.png
+                    existing_coloring = components_node.find("Coloring")
+                    if existing_coloring is not None:
+                        components_node.remove(existing_coloring)
+
+                    coloring_node = ET.SubElement(components_node, "Coloring")
+                    color_a = ET.SubElement(coloring_node, "Color", {"Color": "B3FF0000"})
+                    color_b = ET.SubElement(coloring_node, "Color", {"Color": "B300FF00"})
+
+                    if len(component_guids) >= 2:
+                        ET.SubElement(color_a, "Component", {"IfcGuid": component_guids[0]})
+                        ET.SubElement(color_b, "Component", {"IfcGuid": component_guids[1]})
+                        
+                v_tree.write(new_bcfv, encoding="utf-8", xml_declaration=True)
+            except Exception:
+                pass
+
+        # B. markup.bcf 파싱, 정보 추출 및 XML 수정 (최적화 3: 파싱 1회로 통합)
+        markup_path = os.path.join(topic_path, "markup.bcf")
+        if os.path.exists(markup_path):
+            try:
+                m_tree = ET.parse(markup_path)
+                m_root = m_tree.getroot()
+                for elem in m_root.iter():
+                    if elem.tag.endswith("Title"):
+                        clash_set_name = elem.text
+                        break
+                        
+                viewpoints_node = m_root.find("Viewpoints")
+                if viewpoints_node is not None:
+                    for child in list(viewpoints_node):
+                        viewpoints_node.remove(child)
+                    viewpoint = ET.SubElement(viewpoints_node, "Viewpoint")
+                    viewpoint.text = "viewpoint.bcfv"
+                    snapshot = ET.SubElement(viewpoints_node, "Snapshot")
+                    snapshot.text = "snapshot.png"
+                    
+                m_tree.write(markup_path, encoding="utf-8", xml_declaration=True)
+            except Exception:
+                pass
+
+        # C. Snapshot 이미지 생성
         target_png = os.path.join(topic_path, "snapshot.png")
-        dummy_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
         with open(target_png, "wb") as f:
             f.write(dummy_png)
 
-        # C. Update XML internal paths in markup.bcf
-        markup_path = os.path.join(topic_path, "markup.bcf")
-        if not os.path.exists(markup_path): continue
+        # D. P1 정보 매핑
+        if len(guids) >= 2:
+            key = frozenset([guids[0], guids[1]])
+            clash_point = clash_point_map.get(key)
 
-        tree = ET.parse(markup_path)
-        root = tree.getroot()
-        
-        viewpoints_node = root.find("Viewpoints")
-        if viewpoints_node is not None:
-            for child in list(viewpoints_node):
-                viewpoints_node.remove(child)
-            
-            viewpoint = ET.SubElement(viewpoints_node, "Viewpoint")
-            viewpoint.text = "viewpoint.bcfv"
-            snapshot = ET.SubElement(viewpoints_node, "Snapshot")
-            snapshot.text = "snapshot.png"
+        return {
+            "clash_set": clash_set_name,
+            "clash_guid": topic_guid,
+            "guid1": guids[0] if len(guids) > 0 else None,
+            "guid2": guids[1] if len(guids) > 1 else None,
+            "clash_point": clash_point
+        }
 
-        tree.write(markup_path, encoding="utf-8", xml_declaration=True)
-
-        # D. Update XML internal paths in viewpoint.bcfv
-        bcfv_path = os.path.join(topic_path, "viewpoint.bcfv")
-        if not os.path.exists(bcfv_path): continue
-
-        tree = ET.parse(bcfv_path)
-        root = tree.getroot()
-        
-        components_node = root.find("Components")
-        if components_node is not None:
-            selection_node = components_node.find("Selection")
-            if selection_node is None:
-                component_guids = []
-            else:
-                component_guids = [
-                    comp.attrib["IfcGuid"]
-                    for comp in selection_node.findall("Component")
-                    if "IfcGuid" in comp.attrib
-                ]
-
-            existing_coloring = components_node.find("Coloring")
-            if existing_coloring is not None:
-                components_node.remove(existing_coloring)
-
-            coloring_node = ET.SubElement(components_node, "Coloring")
-            color_a = ET.SubElement(coloring_node, "Color", {"Color": "B3FF0000"})
-            color_b = ET.SubElement(coloring_node, "Color", {"Color": "B300FF00"})
-
-            if len(component_guids) >= 2:
-                guid_a = component_guids[0]
-                guid_b = component_guids[1]
-                ET.SubElement(color_a, "Component", {"IfcGuid": guid_a})
-                ET.SubElement(color_b, "Component", {"IfcGuid": guid_b})
-
-        tree.write(bcfv_path, encoding="utf-8", xml_declaration=True)
+    # 최적화 4: I/O 바운드 작업인 폴더 처리를 멀티스레드로 병렬 처리
+    topics = os.listdir(temp_dir)
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        for result in executor.map(process_topic, topics):
+            if result is not None:
+                extracted_data.append(result)
 
     # 3. Save extracted data to JSON
     json_output_path = os.path.splitext(bcf_file_path)[0] + "_clashes.json"
