@@ -67,7 +67,7 @@ def remove_files(paths: List[str]):
 # --- Endpoints ---
 
 @app.post("/clash", response_class=FileResponse)
-async def run_clash_detection(clash_sets: List[ClashSet], background_tasks: BackgroundTasks):
+def run_clash_detection(clash_sets: List[ClashSet], background_tasks: BackgroundTasks):
     """
     input.json 형태의 데이터를 받아 간섭 체크를 수행하고 BCF 파일을 반환합니다.
     """
@@ -94,8 +94,9 @@ async def run_clash_detection(clash_sets: List[ClashSet], background_tasks: Back
         if not os.path.exists(output_path):
             raise HTTPException(status_code=500, detail="BCF file generation failed.")
 
-        # 5. BCF와 JSON을 ZIP으로 압축
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # 5. BCF와 JSON을 ZIP으로 묶기 (이중 압축 방지)
+        # BCF는 이미 압축된 파일이므로 ZIP_DEFLATED 대신 ZIP_STORED를 사용하여 불필요한 재압축(CPU 소모) 시간을 대폭 제거합니다.
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_STORED) as zipf:
             zipf.write(bcf_file, os.path.basename(bcf_file))
             zipf.write(json_file, os.path.basename(json_file))
 
@@ -123,7 +124,7 @@ async def run_clash_detection(clash_sets: List[ClashSet], background_tasks: Back
 # --- 신규 엔드포인트: EDB Data 추가 ---
 
 @app.post("/add-edb-data", response_class=FileResponse)
-async def add_edb_data_endpoint(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+def add_edb_data_endpoint(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     """
     IFC 파일을 업로드하면 EDB API를 통해 데이터를 조회해 새로운 PropertySet을 추가하고,
     Express ID 기준으로 자동 정렬된 IFC 파일을 반환합니다.
@@ -161,7 +162,7 @@ async def add_edb_data_endpoint(background_tasks: BackgroundTasks, file: UploadF
 # --- 신규 엔드포인트: 커스텀 Property 추가 ---
 
 @app.post("/process-properties", response_class=FileResponse)
-async def process_properties_endpoint(
+def process_properties_endpoint(
     background_tasks: BackgroundTasks, 
     file: UploadFile = File(...),
     action: str = Form(...),

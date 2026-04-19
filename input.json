@@ -1,23 +1,23 @@
 [
   {
     "name": "Clash Set A",
-    "mode": "clearance",
+    "mode": "intersection",
     "a": [
       {
-        "file": "D:\\rst.ifc",
-        "selector": "IfcColumn",
+        "file": "C:\\01-Projects\\rst.ifc",
+        "selector": "IfcSlab",
         "mode": "i"
       }
     ],
     "b": [
       {
-        "file": "D:\\rst.ifc",
-        "selector": "IfcPile",
+        "file": "C:\\01-Projects\\rst.ifc",
+        "selector": "IfcBeam",
         "mode": "i"
       }
     ],
-    "clearance": 2.1,
-    "tolerance": 0.0,
+    "clearance": 0.0,
+    "tolerance": 0.01,
     "check_all": true
   }
 ]

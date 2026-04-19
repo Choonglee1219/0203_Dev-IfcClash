@@ -78,7 +78,7 @@ python edbData.py <input_file.ifc>
 [
   {
     "name": "Structural vs MEP",
-    "mode": "clash",
+    "mode": "intersection",
     "tolerance": 0.01,
     "check_all": true,
     "a": [

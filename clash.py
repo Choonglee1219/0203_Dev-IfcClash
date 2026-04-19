@@ -57,7 +57,7 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
                     clash_point_map[key] = clash["p1"]
 
     extracted_data = [] 
-    dummy_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+    dummy_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
 
     # 1. 원본 ZIP 파일을 메모리로 완전히 읽기
     with open(bcf_file_path, "rb") as f:
@@ -163,8 +163,8 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
                 if not f.endswith('/') and not f.endswith('.bcfv') and not f.endswith('markup.bcf') and not f.endswith('snapshot.png'):
                     zout.writestr(f, zin.read(f))
 
-            # D. 공용 Snapshot 주입
-            zout.writestr(f"{topic_guid}/snapshot.png", dummy_png)
+            # D. 공용 Snapshot 주입 (압축 생략을 통해 CPU 오버헤드 제거 및 처리 속도 향상)
+            zout.writestr(f"{topic_guid}/snapshot.png", dummy_png, compress_type=zipfile.ZIP_STORED)
 
             # E. P1 정보 매핑 및 추출
             clash_point = None
@@ -198,10 +198,10 @@ def post_process_bcf(bcf_file_path, raw_clash_data=None):
 
 if __name__ == "__main__":
     ## Input Parameters
-    bcf_file_path = r"D:\\02-Dev\\0203_Dev-IfcClash\\clash-detection.bcf"
+    bcf_file_path = r"C:\\01-Projects\\0203_Dev-IfcClash\\clash-detection.bcf"
 
     ## Define clash matrix
-    input_file = r"D:\\02-Dev\\0203_Dev-IfcClash\\input.json"
+    input_file = r"C:\\01-Projects\\0203_Dev-IfcClash\\input.json"
     with open(input_file, "r") as clash_sets_file:
        clash_sets = json.loads(clash_sets_file.read())
 
